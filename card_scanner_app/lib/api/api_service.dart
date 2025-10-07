@@ -1,13 +1,13 @@
 import 'dart:convert';
+import 'dart:async'; // Import for timeout functionality
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../models/business_card.dart';
 
 class ApiService {
-  // Use localhost for Chrome or 10.0.2.2 for Android Emulator
-  static const String _baseUrl = 'https://business-card-scanner-tnu4.onrender.com';
+  static const String _baseUrl =
+      'https://business-card-scanner-tnu4.onrender.com';
 
-  // This function is now updated to send both a front and an optional back image
   static Future<BusinessCard?> scanCard({
     required Uint8List frontImageBytes,
     required String frontFilename,
@@ -15,72 +15,80 @@ class ApiService {
     String? backFilename,
   }) async {
     try {
-      final Uri uri = Uri.parse('$_baseUrl/scan-card');
-      final request = http.MultipartRequest('POST', uri);
+      final uri = Uri.parse('$_baseUrl/scan-card');
+      var request = http.MultipartRequest('POST', uri);
 
-      // Add front image (required)
-      final frontFile = http.MultipartFile.fromBytes(
-        'front', // Field name must match the backend: request.files['front']
-        frontImageBytes,
-        filename: frontFilename,
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'front',
+          frontImageBytes,
+          filename: frontFilename,
+        ),
       );
-      request.files.add(frontFile);
 
-      // Add back image (optional)
       if (backImageBytes != null && backFilename != null) {
-        final backFile = http.MultipartFile.fromBytes(
-          'back', // Field name must match the backend: request.files.get('back')
-          backImageBytes,
-          filename: backFilename,
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'back',
+            backImageBytes,
+            filename: backFilename,
+          ),
         );
-        request.files.add(backFile);
-        print('Sending front and back images to backend...');
-      } else {
-        print('Sending front image to backend...');
       }
 
-      final response = await request.send();
+      print("Sending images to live backend...");
 
-      if (response.statusCode == 200) {
-        final responseBody = await response.stream.bytesToString();
-        print('Backend Response: $responseBody');
-        final Map<String, dynamic> jsonData = jsonDecode(responseBody);
-        return BusinessCard.fromJson(jsonData);
+      // THE FIX IS HERE: We now send the request and wait for a response, with a 30-second timeout.
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 30),
+      );
+
+      if (streamedResponse.statusCode == 200) {
+        final responseBody = await streamedResponse.stream.bytesToString();
+        print("Backend Response: $responseBody");
+        final decodedData = json.decode(responseBody);
+        return BusinessCard.fromJson(decodedData);
       } else {
-        final errorBody = await response.stream.bytesToString();
-        print('Server Error: ${response.statusCode}');
-        print('Error Body: $errorBody');
+        final errorBody = await streamedResponse.stream.bytesToString();
+        print("Server Error: ${streamedResponse.statusCode}");
+        print("Error Body: $errorBody");
         return null;
       }
+    } on TimeoutException {
+      print("The connection to the server timed out after 30 seconds.");
+      return null;
     } catch (e) {
-      print('An exception occurred: $e');
+      print("An exception occurred during scan: $e");
       return null;
     }
   }
 
-  // The saveCard function remains the same as it's already correct
   static Future<bool> saveCard(BusinessCard card) async {
     try {
-      final Uri uri = Uri.parse('$_baseUrl/save-contact');
-      final response = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(card.toJson()),
-      );
+      final uri = Uri.parse('$_baseUrl/save-contact');
+      // THE FIX IS HERE: We also add a timeout to the save operation.
+      final response = await http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode(card.toJson()),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        print('Save successful: ${responseData['message']}');
+        print("Contact saved successfully.");
         return true;
       } else {
-        print('Server Error on save: ${response.statusCode}');
-        print('Error Body: ${response.body}');
+        print("Failed to save contact. Status: ${response.statusCode}");
+        print("Response Body: ${response.body}");
         return false;
       }
+    } on TimeoutException {
+      print("The connection to the server timed out while saving.");
+      return false;
     } catch (e) {
-      print('An exception occurred during save: $e');
+      print("An exception occurred while saving: $e");
       return false;
     }
   }
 }
-

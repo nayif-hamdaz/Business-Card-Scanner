@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../api/api_service.dart';
 import '../models/business_card.dart';
-import 'review_screen.dart'; // Make sure this import is here
+import 'review_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,8 +18,18 @@ class _HomeScreenState extends State<HomeScreen> {
   ImageData? _backImage;
   bool _isLoading = false;
 
-  // Function to show the image source selection dialog (Camera vs Gallery)
+  // NEW: A helper function to clear the selected images.
+  void _clearSelectedImages() {
+    setState(() {
+      _frontImage = null;
+      _backImage = null;
+      _isTwoSided = false; // Also reset the toggle
+    });
+  }
+
   Future<ImageSource?> _showImageSourceDialog() async {
+    // This check is important before showing a dialog
+    if (!mounted) return null;
     return showDialog<ImageSource>(
       context: context,
       builder: (context) => AlertDialog(
@@ -40,13 +50,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Function to handle picking an image for either front or back
   Future<void> _pickImage(bool isFront) async {
     final source = await _showImageSourceDialog();
     if (source == null) return;
 
     final ImagePicker picker = ImagePicker();
-    // Add image quality to reduce file size and processing time
     final XFile? imageFile = await picker.pickImage(
       source: source,
       imageQuality: 80,
@@ -56,12 +64,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final bytes = await imageFile.readAsBytes();
       final name = imageFile.name;
 
-      // We need context to be valid before showing the dialog
       if (!mounted) return;
-
       final confirm = await _showImageConfirmationDialog(bytes, source);
 
-      // Only proceed if the user explicitly confirms
       if (confirm == true) {
         setState(() {
           if (isFront) {
@@ -74,7 +79,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // UPDATED: Dialog now includes a "Cancel" button for all cases.
   Future<bool?> _showImageConfirmationDialog(
     Uint8List imageBytes,
     ImageSource source,
@@ -96,18 +100,15 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Image.memory(imageBytes, fit: BoxFit.contain),
           ),
           actions: [
-            // Cancel button (returns null)
             TextButton(
               onPressed: () => Navigator.pop(context, null),
               child: const Text('Cancel'),
             ),
-            // Retake button (only for camera, returns false)
             if (source == ImageSource.camera)
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('Retake'),
               ),
-            // Confirm button (returns true)
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(
@@ -122,7 +123,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // The main function to trigger the scan
   Future<void> _scanCard() async {
     if (_frontImage == null) {
       if (!mounted) return;
@@ -149,14 +149,20 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _isLoading = false;
     });
-
     if (!mounted) return;
 
     if (card != null) {
       print("Successfully scanned card: ${card.name}");
-      Navigator.of(context).push(
+
+      // THE FIX IS HERE: We now 'await' the result from the ReviewScreen.
+      final result = await Navigator.of(context).push<bool>(
         MaterialPageRoute(builder: (context) => ReviewScreen(cardData: card)),
       );
+
+      // If the result is 'true', it means the save was successful.
+      if (result == true) {
+        _clearSelectedImages();
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -293,7 +299,6 @@ class _HomeScreenState extends State<HomeScreen> {
             child: image != null
                 ? ClipRRect(
                     borderRadius: BorderRadius.circular(10),
-                    // UPDATED: Changed fit to 'contain' to prevent zooming.
                     child: Image.memory(image.bytes, fit: BoxFit.contain),
                   )
                 : const Center(
@@ -323,6 +328,5 @@ class _HomeScreenState extends State<HomeScreen> {
 class ImageData {
   final Uint8List bytes;
   final String name;
-
   ImageData({required this.bytes, required this.name});
 }

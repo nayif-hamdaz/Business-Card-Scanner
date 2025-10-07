@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 
 class BusinessCard {
-  // NEW: Added the category field.
   final String category;
   final String organization;
   final String name;
@@ -11,6 +10,7 @@ class BusinessCard {
   final String website;
   final String address;
   final String remarks;
+  final String? contactType;
 
   BusinessCard({
     required this.category,
@@ -22,10 +22,9 @@ class BusinessCard {
     required this.website,
     required this.address,
     required this.remarks,
+    this.contactType,
   });
 
-  // Factory constructor to create a BusinessCard from JSON.
-  // This is used when we receive data from the Python backend.
   factory BusinessCard.fromJson(Map<String, dynamic> json) {
     return BusinessCard(
       category: json['category'] ?? '',
@@ -40,8 +39,6 @@ class BusinessCard {
     );
   }
 
-  // Method to convert a BusinessCard object to JSON.
-  // This is used when we send data to the Python backend to be saved.
   Map<String, dynamic> toJson() {
     return {
       'category': category,
@@ -53,15 +50,15 @@ class BusinessCard {
       'website': website,
       'address': address,
       'remarks': remarks,
+      // THE FINAL FIX IS HERE: Changed back to 'ContactType' to match your Python code.
+      'ContactType': contactType ?? '',
     };
   }
 }
 
-// A simple class to hold image data for passing between screens.
 class ImageData {
   final Uint8List bytes;
   final String name;
 
   ImageData({required this.bytes, required this.name});
 }
-
