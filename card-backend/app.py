@@ -3,7 +3,7 @@ import json
 import base64
 import requests
 import msal
-import httpx # <-- ADD THIS IMPORT
+import httpx # <-- The required import
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
@@ -14,7 +14,7 @@ load_dotenv()
 
 # --- Initialize OpenAI ---
 try:
-    # THE FIX IS HERE: We explicitly tell the client not to use proxies.
+    # THE CRITICAL FIX IS HERE: This line handles the Render proxy issue.
     client = OpenAI(http_client=httpx.Client(proxies=""))
 except Exception as e:
     raise ValueError(f"Failed to initialize OpenAI client. Is OPENAI_API_KEY set? Error: {e}")
@@ -68,7 +68,6 @@ def get_mime_type(file_storage):
 # --- API Endpoints ---
 @app.route('/')
 def index():
-    # A simple endpoint to confirm the API is live.
     return "Business Card Scanner API is live and running."
 
 @app.route('/scan-card', methods=['POST'])
@@ -93,32 +92,17 @@ def scan_card():
         front_bytes = front_file.read()
         front_base64 = base64.b64encode(front_bytes).decode('utf-8')
         front_mime_type = get_mime_type(front_file)
-        messages_content.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:{front_mime_type};base64,{front_base64}"}
-        })
+        messages_content.append({ "type": "image_url", "image_url": {"url": f"data:{front_mime_type};base64,{front_base64}"} })
 
         if back_file and back_file.filename:
             back_bytes = back_file.read()
             back_base64 = base64.b64encode(back_bytes).decode('utf-8')
             back_mime_type = get_mime_type(back_file)
-            messages_content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:{back_mime_type};base64,{back_base64}"}
-            })
+            messages_content.append({ "type": "image_url", "image_url": {"url": f"data:{back_mime_type};base64,{back_base64}"} })
 
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            response_format={"type": "json_object"},
-            messages=[{"role": "user", "content": messages_content}]
-        )
-
-        json_string = response.choices[0].message.content
-        parsed_data = json.loads(json_string or '{}')
-        
-        parsed_data.setdefault('category', '')
-        parsed_data.setdefault('remarks', '')
-        
+        response = client.chat.completions.create( model="gpt-4o", response_format={"type": "json_object"}, messages=[{"role": "user", "content": messages_content}])
+        parsed_data = json.loads(response.choices[0].message.content or '{}')
+        parsed_data.setdefault('category', ''); parsed_data.setdefault('remarks', '')
         return jsonify(parsed_data)
 
     except Exception as e:
@@ -135,19 +119,12 @@ def save_contact():
         return jsonify({"error": "Failed to acquire access token."}), 500
 
     row_values = [
-        contact_data.get('category', ''),
-        contact_data.get('organization', ''),
-        contact_data.get('name', ''),
-        contact_data.get('designation', ''),
-        contact_data.get('contact', ''),
-        contact_data.get('email', ''),
-        contact_data.get('website', ''),
-        contact_data.get('address', ''),
-        contact_data.get('remarks', '')
+        contact_data.get('category', ''), contact_data.get('organization', ''), contact_data.get('name', ''),
+        contact_data.get('designation', ''), contact_data.get('contact', ''), contact_data.get('email', ''),
+        contact_data.get('website', ''), contact_data.get('address', ''), contact_data.get('remarks', '')
     ]
 
     graph_url = f"https://graph.microsoft.com/v1.0/users/{USER_ID}/drive/root:/{EXCEL_FILE_NAME}:/workbook/tables/{EXCEL_TABLE_NAME}/rows"
-
     headers = { 'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json' }
     payload = { "values": [row_values] }
     response = requests.post(graph_url, headers=headers, json=payload)
