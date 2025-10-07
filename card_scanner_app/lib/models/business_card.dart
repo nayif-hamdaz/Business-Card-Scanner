@@ -1,56 +1,67 @@
-    // This class defines the structure of our business card data.
-    class BusinessCard {
-      // These are the fields that will hold the data from the scanned card.
-      String name;
-      String organization;
-      String designation;
-      String contact; // This will hold the phone number
-      String email;
-      String website;
-      String address;
-      String remarks;
+import 'dart:typed_data';
 
-      // This is the constructor. It sets default empty values when a new card is created.
-      BusinessCard({
-        this.name = '',
-        this.organization = '',
-        this.designation = '',
-        this.contact = '',
-        this.email = '',
-        this.website = '',
-        this.address = '',
-        this.remarks = '',
-      });
+class BusinessCard {
+  // NEW: Added the category field.
+  final String category;
+  final String organization;
+  final String name;
+  final String designation;
+  final String contact;
+  final String email;
+  final String website;
+  final String address;
+  final String remarks;
 
-      // This is a special constructor that creates a BusinessCard object
-      // from the JSON data that our Python backend sends us.
-      // The keys like 'name', 'organization' MUST match the keys in the JSON.
-      factory BusinessCard.fromJson(Map<String, dynamic> json) {
-        return BusinessCard(
-          name: json['name'] ?? '',
-          organization: json['organization'] ?? '',
-          designation: json['designation'] ?? '',
-          contact: json['contact'] ?? '',
-          email: json['email'] ?? '',
-          website: json['website'] ?? '',
-          address: json['address'] ?? '',
-          // Remarks are not sent from the backend, so we don't look for them here.
-        );
-      }
+  BusinessCard({
+    required this.category,
+    required this.organization,
+    required this.name,
+    required this.designation,
+    required this.contact,
+    required this.email,
+    required this.website,
+    required this.address,
+    required this.remarks,
+  });
 
-      // This method converts our BusinessCard object back into JSON format,
-      // which is needed when we send the final data to our '/save-contact' endpoint.
-      Map<String, dynamic> toJson() {
-        return {
-          'name': name,
-          'organization': organization,
-          'designation': designation,
-          'contact': contact,
-          'email': email,
-          'website': website,
-          'address': address,
-          'remarks': remarks,
-        };
-      }
-    }
-    
+  // Factory constructor to create a BusinessCard from JSON.
+  // This is used when we receive data from the Python backend.
+  factory BusinessCard.fromJson(Map<String, dynamic> json) {
+    return BusinessCard(
+      category: json['category'] ?? '',
+      organization: json['organization'] ?? '',
+      name: json['name'] ?? '',
+      designation: json['designation'] ?? '',
+      contact: json['contact'] ?? '',
+      email: json['email'] ?? '',
+      website: json['website'] ?? '',
+      address: json['address'] ?? '',
+      remarks: json['remarks'] ?? '',
+    );
+  }
+
+  // Method to convert a BusinessCard object to JSON.
+  // This is used when we send data to the Python backend to be saved.
+  Map<String, dynamic> toJson() {
+    return {
+      'category': category,
+      'organization': organization,
+      'name': name,
+      'designation': designation,
+      'contact': contact,
+      'email': email,
+      'website': website,
+      'address': address,
+      'remarks': remarks,
+    };
+  }
+}
+
+// A simple class to hold image data for passing between screens.
+class ImageData {
+  final Uint8List bytes;
+  final String name;
+
+  ImageData({required this.bytes, required this.name});
+}
+

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart'; // <--- THIS IS THE FIX
+import 'package:flutter/material.dart';
 import '../api/api_service.dart';
 import '../models/business_card.dart';
 
@@ -11,10 +11,11 @@ class ReviewScreen extends StatefulWidget {
 }
 
 class _ReviewScreenState extends State<ReviewScreen> {
-  // Controllers to manage the text in each field, allowing for edits
+  // NEW: Added a controller for the category field.
+  late final TextEditingController _categoryController;
+  late final TextEditingController _organizationController;
   late final TextEditingController _nameController;
-  late final TextEditingController _orgController;
-  late final TextEditingController _desigController;
+  late final TextEditingController _designationController;
   late final TextEditingController _contactController;
   late final TextEditingController _emailController;
   late final TextEditingController _websiteController;
@@ -26,10 +27,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
   @override
   void initState() {
     super.initState();
-    // Initialize controllers with the data from the scanned card
+    // Initialize all controllers with the data from the scanned card.
+    _categoryController = TextEditingController(text: widget.cardData.category);
+    _organizationController = TextEditingController(text: widget.cardData.organization);
     _nameController = TextEditingController(text: widget.cardData.name);
-    _orgController = TextEditingController(text: widget.cardData.organization);
-    _desigController = TextEditingController(text: widget.cardData.designation);
+    _designationController = TextEditingController(text: widget.cardData.designation);
     _contactController = TextEditingController(text: widget.cardData.contact);
     _emailController = TextEditingController(text: widget.cardData.email);
     _websiteController = TextEditingController(text: widget.cardData.website);
@@ -39,10 +41,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
   @override
   void dispose() {
-    // Clean up the controllers when the screen is closed
+    // Dispose of all controllers to free up resources.
+    _categoryController.dispose();
+    _organizationController.dispose();
     _nameController.dispose();
-    _orgController.dispose();
-    _desigController.dispose();
+    _designationController.dispose();
     _contactController.dispose();
     _emailController.dispose();
     _websiteController.dispose();
@@ -52,13 +55,16 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   Future<void> _saveContact() async {
-    setState(() => _isSaving = true);
+    setState(() {
+      _isSaving = true;
+    });
 
-    // Create a new BusinessCard object with the potentially edited data
-    final finalCardData = BusinessCard(
+    // Create a new BusinessCard object with the final, potentially edited data.
+    final updatedCard = BusinessCard(
+      category: _categoryController.text,
+      organization: _organizationController.text,
       name: _nameController.text,
-      organization: _orgController.text,
-      designation: _desigController.text,
+      designation: _designationController.text,
       contact: _contactController.text,
       email: _emailController.text,
       website: _websiteController.text,
@@ -66,84 +72,120 @@ class _ReviewScreenState extends State<ReviewScreen> {
       remarks: _remarksController.text,
     );
 
-    // Call the ApiService to save the data
-    final bool success = await ApiService.saveCard(finalCardData);
+    final success = await ApiService.saveCard(updatedCard);
 
-    if (!mounted) return;
+    setState(() {
+      _isSaving = false;
+    });
 
-    if (success) {
+    if (mounted) {
+      final message = success ? 'Contact saved successfully!' : 'Failed to save contact.';
+      final color = success ? Colors.green : Colors.red;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Contact saved successfully!'),
-          backgroundColor: Colors.green,
-        ),
+        SnackBar(content: Text(message), backgroundColor: color),
       );
-      // Go back to the home screen after a successful save
-      Navigator.of(context).pop();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to save contact. Please try again.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (success) {
+        // Go back to the home screen on success.
+        Navigator.of(context).pop();
+      }
     }
-
-    setState(() => _isSaving = false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Review & Save Contact'),
+        title: const Text('Review & Edit'),
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            _buildTextField(label: 'Name', controller: _nameController, icon: Icons.person),
-            _buildTextField(label: 'Organization', controller: _orgController, icon: Icons.business),
-            _buildTextField(label: 'Designation', controller: _desigController, icon: Icons.work),
-            _buildTextField(label: 'Contact', controller: _contactController, icon: Icons.phone, keyboardType: TextInputType.phone),
-            _buildTextField(label: 'Email', controller: _emailController, icon: Icons.email, keyboardType: TextInputType.emailAddress),
-            _buildTextField(label: 'Website', controller: _websiteController, icon: Icons.public, keyboardType: TextInputType.url),
-            _buildTextField(label: 'Address', controller: _addressController, icon: Icons.location_on),
-            _buildTextField(label: 'Remarks', controller: _remarksController, icon: Icons.notes, maxLines: 3),
-            const SizedBox(height: 30),
-            if (_isSaving)
-              const CircularProgressIndicator()
-            else
-              ElevatedButton.icon(
-                onPressed: _saveContact,
-                icon: const Icon(Icons.save_alt_outlined, size: 28),
-                label: const Text('Save to File'),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 55),
-                  textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  backgroundColor: Colors.deepPurple,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-              ),
+            // NEW: Added the text field for Category at the top.
+            _buildTextField(
+              controller: _categoryController,
+              label: 'Category',
+              icon: Icons.category,
+            ),
+            _buildTextField(
+              controller: _organizationController,
+              label: 'Organization',
+              icon: Icons.business,
+            ),
+            _buildTextField(
+              controller: _nameController,
+              label: 'Name',
+              icon: Icons.person,
+            ),
+            _buildTextField(
+              controller: _designationController,
+              label: 'Designation',
+              icon: Icons.work,
+            ),
+            _buildTextField(
+              controller: _contactController,
+              label: 'Contact',
+              icon: Icons.phone,
+              keyboardType: TextInputType.phone,
+            ),
+            _buildTextField(
+              controller: _emailController,
+              label: 'Email',
+              icon: Icons.email,
+              keyboardType: TextInputType.emailAddress,
+            ),
+            _buildTextField(
+              controller: _websiteController,
+              label: 'Website',
+              icon: Icons.web,
+            ),
+            _buildTextField(
+              controller: _addressController,
+              label: 'Address',
+              icon: Icons.location_on,
+              maxLines: 3,
+            ),
+            _buildTextField(
+              controller: _remarksController,
+              label: 'Remarks',
+              icon: Icons.note,
+              maxLines: 3,
+            ),
+            const SizedBox(height: 24),
+            _isSaving
+                ? const CircularProgressIndicator()
+                : SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _saveContact,
+                      icon: const Icon(Icons.save),
+                      label: const Text('Save to File'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: Colors.deepPurple,
+                        foregroundColor: Colors.white,
+                        textStyle: const TextStyle(fontSize: 18),
+                      ),
+                    ),
+                  ),
           ],
         ),
       ),
     );
   }
 
-  // Helper widget to reduce repetitive code for text fields
+  // Helper widget to reduce repetitive code for text fields.
   Widget _buildTextField({
-    required String label,
     required TextEditingController controller,
+    required String label,
     required IconData icon,
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: TextField(
         controller: controller,
         maxLines: maxLines,
@@ -155,7 +197,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
             borderRadius: BorderRadius.circular(12.0),
           ),
           filled: true,
-          fillColor: Colors.grey.shade100,
+          fillColor: Colors.grey[100],
         ),
       ),
     );
