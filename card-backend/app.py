@@ -3,7 +3,7 @@ import json
 import base64
 import requests
 import msal
-import httpx # <-- The required import
+import httpx
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
@@ -14,7 +14,6 @@ load_dotenv()
 
 # --- Initialize OpenAI ---
 try:
-    # THE CRITICAL FIX IS HERE: This line handles the Render proxy issue.
     client = OpenAI(http_client=httpx.Client(proxies=""))
 except Exception as e:
     raise ValueError(f"Failed to initialize OpenAI client. Is OPENAI_API_KEY set? Error: {e}")
@@ -49,20 +48,24 @@ def get_access_token():
     if "access_token" in result:
         return result["access_token"]
     else:
-        print(result.get("error"))
-        print(result.get("error_description"))
-        print(result.get("correlation_id"))
+        print(result.get("error"), result.get("error_description"))
         return None
 
 # --- Helper function to get mime type ---
 def get_mime_type(file_storage):
     filename = file_storage.filename.lower()
-    if filename.endswith('.png'): return 'image/png'
-    if filename.endswith(('.jpg', '.jpeg')): return 'image/jpeg'
-    if filename.endswith('.gif'): return 'image/gif'
-    if filename.endswith('.bmp'): return 'image/bmp'
-    if filename.endswith('.webp'): return 'image/webp'
-    if filename.endswith('.heic'): return 'image/heic'
+    if filename.endswith('.png'):
+        return 'image/png'
+    elif filename.endswith(('.jpg', '.jpeg')):
+        return 'image/jpeg'
+    elif filename.endswith('.gif'):
+        return 'image/gif'
+    elif filename.endswith('.bmp'):
+        return 'image/bmp'
+    elif filename.endswith('.webp'):
+        return 'image/webp'
+    elif filename.endswith('.heic'):
+        return 'image/heic'
     return 'application/octet-stream'
 
 # --- API Endpoints ---
@@ -74,12 +77,13 @@ def index():
 def scan_card():
     if 'front' not in request.files:
         return jsonify({"error": "No 'front' image file found in the request."}), 400
-
+    
     front_file = request.files['front']
     back_file = request.files.get('back')
-
+    
     try:
         messages_content = []
+        # THIS IS THE FULL, COMPLETE PROMPT
         system_prompt = """
         You are an expert business card data extractor. Your job is to analyze the business card and extract key information in a structured JSON format.
         First, determine the business's category (e.g., Services, Vendor, Distributor, Infrastructure, Reseller, Technology, etc.).
@@ -89,20 +93,36 @@ def scan_card():
         """
         messages_content.append({"type": "text", "text": system_prompt})
 
+        # THIS IS THE FULL, COMPLETE LOGIC FOR HANDLING IMAGES
         front_bytes = front_file.read()
         front_base64 = base64.b64encode(front_bytes).decode('utf-8')
         front_mime_type = get_mime_type(front_file)
-        messages_content.append({ "type": "image_url", "image_url": {"url": f"data:{front_mime_type};base64,{front_base64}"} })
+        messages_content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{front_mime_type};base64,{front_base64}"}
+        })
 
         if back_file and back_file.filename:
             back_bytes = back_file.read()
             back_base64 = base64.b64encode(back_bytes).decode('utf-8')
             back_mime_type = get_mime_type(back_file)
-            messages_content.append({ "type": "image_url", "image_url": {"url": f"data:{back_mime_type};base64,{back_base64}"} })
+            messages_content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{back_mime_type};base64,{back_base64}"}
+            })
 
-        response = client.chat.completions.create( model="gpt-4o", response_format={"type": "json_object"}, messages=[{"role": "user", "content": messages_content}])
-        parsed_data = json.loads(response.choices[0].message.content or '{}')
-        parsed_data.setdefault('category', ''); parsed_data.setdefault('remarks', '')
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            response_format={"type": "json_object"},
+            messages=[{"role": "user", "content": messages_content}]
+        )
+
+        json_string = response.choices[0].message.content
+        parsed_data = json.loads(json_string or '{}')
+        
+        parsed_data.setdefault('category', '')
+        parsed_data.setdefault('remarks', '')
+        
         return jsonify(parsed_data)
 
     except Exception as e:
@@ -118,10 +138,18 @@ def save_contact():
     if not access_token:
         return jsonify({"error": "Failed to acquire access token."}), 500
 
+    # The order MUST match the columns in your Excel file exactly.
     row_values = [
-        contact_data.get('category', ''), contact_data.get('organization', ''), contact_data.get('name', ''),
-        contact_data.get('designation', ''), contact_data.get('contact', ''), contact_data.get('email', ''),
-        contact_data.get('website', ''), contact_data.get('address', ''), contact_data.get('remarks', '')
+        contact_data.get('category', ''),
+        contact_data.get('organization', ''),
+        contact_data.get('name', ''),
+        contact_data.get('designation', ''),
+        contact_data.get('contact', ''),
+        contact_data.get('email', ''),
+        contact_data.get('website', ''),
+        contact_data.get('address', ''),
+        contact_data.get('remarks', ''),
+        contact_data.get('ContactType', '') # New field
     ]
 
     graph_url = f"https://graph.microsoft.com/v1.0/users/{USER_ID}/drive/root:/{EXCEL_FILE_NAME}:/workbook/tables/{EXCEL_TABLE_NAME}/rows"
