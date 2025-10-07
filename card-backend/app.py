@@ -3,6 +3,7 @@ import json
 import base64
 import requests
 import msal
+import httpx # <-- ADD THIS IMPORT
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
@@ -13,7 +14,8 @@ load_dotenv()
 
 # --- Initialize OpenAI ---
 try:
-    client = OpenAI()
+    # THE FIX IS HERE: We explicitly tell the client not to use proxies.
+    client = OpenAI(http_client=httpx.Client(proxies=""))
 except Exception as e:
     raise ValueError(f"Failed to initialize OpenAI client. Is OPENAI_API_KEY set? Error: {e}")
 
