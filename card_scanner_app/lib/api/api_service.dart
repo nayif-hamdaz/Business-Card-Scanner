@@ -1,72 +1,69 @@
 import 'dart:convert';
-import 'dart:async'; // Import for timeout functionality
+import 'dart:async';
 import 'dart:typed_data';
+import 'package:card_scanner_app/models/image_data.dart';
 import 'package:http/http.dart' as http;
 import '../models/business_card.dart';
 
 class ApiService {
+  // --- FOR LOCAL DEVELOPMENT ---
+  // Use this when testing on a physical device.
+  // Replace "YOUR_LAPTOP_IP" with your computer's local IP address.
+  // static const String _baseUrl = 'http://YOUR_LAPTOP_IP:5001';
+
+  // Use this when testing on a local emulator or as a desktop app.
   static const String _baseUrl =
       'https://business-card-scanner-tnu4.onrender.com';
 
-  static Future<BusinessCard?> scanCard({
-    required Uint8List frontImageBytes,
-    required String frontFilename,
-    Uint8List? backImageBytes,
-    String? backFilename,
+  // --- FOR PRODUCTION ---
+  // static const String _baseUrl = 'https://business-card-scanner-tnu4.onrender.com';
+
+  static Future<List<BusinessCard?>> scanBatch({
+    required List<ImageData> images,
   }) async {
     try {
-      final uri = Uri.parse('$_baseUrl/scan-card');
+      final uri = Uri.parse('$_baseUrl/scan-batch');
       var request = http.MultipartRequest('POST', uri);
 
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'front',
-          frontImageBytes,
-          filename: frontFilename,
-        ),
-      );
-
-      if (backImageBytes != null && backFilename != null) {
+      for (var image in images) {
         request.files.add(
           http.MultipartFile.fromBytes(
-            'back',
-            backImageBytes,
-            filename: backFilename,
+            'images', // The key must match the backend
+            image.bytes,
+            filename: image.name,
           ),
         );
       }
 
-      print("Sending images to live backend...");
+      print("Sending batch of ${images.length} images to local backend...");
 
-      // THE FIX IS HERE: We now send the request and wait for a response, with a 30-second timeout.
       final streamedResponse = await request.send().timeout(
-        const Duration(seconds: 30),
+        const Duration(seconds: 60),
       );
 
       if (streamedResponse.statusCode == 200) {
         final responseBody = await streamedResponse.stream.bytesToString();
         print("Backend Response: $responseBody");
-        final decodedData = json.decode(responseBody);
-        return BusinessCard.fromJson(decodedData);
+        final List<dynamic> decodedList = json.decode(responseBody);
+        return decodedList.map((json) => BusinessCard.fromJson(json)).toList();
       } else {
         final errorBody = await streamedResponse.stream.bytesToString();
         print("Server Error: ${streamedResponse.statusCode}");
         print("Error Body: $errorBody");
-        return null;
+        return [];
       }
     } on TimeoutException {
-      print("The connection to the server timed out after 30 seconds.");
-      return null;
+      print("The connection to the server timed out after 60 seconds.");
+      throw Exception('Server timed out. Please try again later.');
     } catch (e) {
-      print("An exception occurred during scan: $e");
-      return null;
+      print("An exception occurred during batch scan: $e");
+      throw Exception('Could not analyze cards. Please try again later.');
     }
   }
 
   static Future<bool> saveCard(BusinessCard card) async {
     try {
       final uri = Uri.parse('$_baseUrl/save-contact');
-      // THE FIX IS HERE: We also add a timeout to the save operation.
       final response = await http
           .post(
             uri,

@@ -1,6 +1,15 @@
+import 'package:card_scanner_app/api/api_service.dart';
 import 'package:flutter/material.dart';
-import '../api/api_service.dart';
 import '../models/business_card.dart';
+
+// Helper classes to pass a structured result back to the ResultsScreen
+enum ReviewAction { savedIndividually, editsSaved }
+
+class ReviewResult {
+  final ReviewAction action;
+  final BusinessCard card;
+  ReviewResult({required this.action, required this.card});
+}
 
 class ReviewScreen extends StatefulWidget {
   final BusinessCard cardData;
@@ -11,7 +20,6 @@ class ReviewScreen extends StatefulWidget {
 }
 
 class _ReviewScreenState extends State<ReviewScreen> {
-  // Add a GlobalKey for the Form to enable validation
   final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _categoryController;
@@ -24,9 +32,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
   late final TextEditingController _addressController;
   late final TextEditingController _remarksController;
 
-  // State variable for the new dropdown, nullable to allow a "hint"
   String? _selectedContactType;
-  final List<String> _contactTypes = ['Customer', 'Supplier'];
+  final List<String> _contactTypes = ['Supplier', 'Customer'];
 
   bool _isSaving = false;
 
@@ -46,6 +53,12 @@ class _ReviewScreenState extends State<ReviewScreen> {
     _websiteController = TextEditingController(text: widget.cardData.website);
     _addressController = TextEditingController(text: widget.cardData.address);
     _remarksController = TextEditingController(text: widget.cardData.remarks);
+
+    // Set default value for contact type
+    _selectedContactType = widget.cardData.contactType;
+    if (_selectedContactType == null || _selectedContactType!.isEmpty) {
+      _selectedContactType = 'Supplier';
+    }
   }
 
   @override
@@ -62,23 +75,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
     super.dispose();
   }
 
-  Future<void> _saveContact() async {
-    // We now check if the form is valid before saving.
-    if (!_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a Contact Type.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _isSaving = true;
-    });
-
-    final updatedCard = BusinessCard(
+  BusinessCard _getUpdatedCard() {
+    return BusinessCard(
       category: _categoryController.text,
       organization: _organizationController.text,
       name: _nameController.text,
@@ -88,26 +86,45 @@ class _ReviewScreenState extends State<ReviewScreen> {
       website: _websiteController.text,
       address: _addressController.text,
       remarks: _remarksController.text,
-      contactType: _selectedContactType, // Pass the selected dropdown value
+      contactType: _selectedContactType,
     );
+  }
 
+  void _saveEdits() {
+    final updatedCard = _getUpdatedCard();
+    Navigator.of(
+      context,
+    ).pop(ReviewResult(action: ReviewAction.editsSaved, card: updatedCard));
+  }
+
+  Future<void> _saveIndividually() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    setState(() {
+      _isSaving = true;
+    });
+
+    final updatedCard = _getUpdatedCard();
     final success = await ApiService.saveCard(updatedCard);
+
     if (!mounted) return;
 
     setState(() {
       _isSaving = false;
     });
 
-    final message = success
-        ? 'Contact saved successfully!'
-        : 'Failed to save contact.';
-    final color = success ? Colors.green : Colors.red;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
-
     if (success) {
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop(
+        ReviewResult(action: ReviewAction.savedIndividually, card: updatedCard),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to save contact.'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -119,12 +136,12 @@ class _ReviewScreenState extends State<ReviewScreen> {
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
       ),
-      // Wrap the content in a Form widget
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildTextField(
                 controller: _categoryController,
@@ -175,27 +192,32 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 icon: Icons.note,
                 maxLines: 3,
               ),
-
-              // The new Dropdown menu widget
               _buildDropdown(),
-
               const SizedBox(height: 24),
-              _isSaving
-                  ? const CircularProgressIndicator()
-                  : SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _saveContact,
-                        icon: const Icon(Icons.save),
-                        label: const Text('Save to File'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Colors.deepPurple,
-                          foregroundColor: Colors.white,
-                          textStyle: const TextStyle(fontSize: 18),
-                        ),
+              if (_isSaving)
+                const Center(child: CircularProgressIndicator())
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _saveEdits,
+                        child: const Text('Save Edits'),
                       ),
                     ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _saveIndividually,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepPurple,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('Save Individually to Excel'),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
@@ -203,19 +225,14 @@ class _ReviewScreenState extends State<ReviewScreen> {
     );
   }
 
-  // Helper widget for the new dropdown
   Widget _buildDropdown() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
-      // Added a validator and a hint for a better user experience
       child: DropdownButtonFormField<String>(
         value: _selectedContactType,
-        hint: const Text(
-          'Choose a contact type...',
-        ), // This text shows when no value is selected
         validator: (value) {
           if (value == null || value.isEmpty) {
-            return 'Please select a type.'; // Error message if not selected
+            return 'Please select a type.';
           }
           return null;
         },
@@ -249,7 +266,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: TextField(
+      child: TextFormField(
         controller: controller,
         maxLines: maxLines,
         keyboardType: keyboardType,

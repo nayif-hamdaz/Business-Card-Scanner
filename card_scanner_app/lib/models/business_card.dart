@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 class BusinessCard {
   final String category;
   final String organization;
@@ -36,6 +34,7 @@ class BusinessCard {
       website: json['website'] ?? '',
       address: json['address'] ?? '',
       remarks: json['remarks'] ?? '',
+      contactType: json['ContactType'], // Match the key from the backend
     );
   }
 
@@ -50,15 +49,9 @@ class BusinessCard {
       'website': website,
       'address': address,
       'remarks': remarks,
-      // THE FINAL FIX IS HERE: Changed back to 'ContactType' to match your Python code.
-      'ContactType': contactType ?? '',
+      'ContactType': contactType == null || contactType!.isEmpty
+          ? 'Supplier'
+          : contactType,
     };
   }
-}
-
-class ImageData {
-  final Uint8List bytes;
-  final String name;
-
-  ImageData({required this.bytes, required this.name});
 }
